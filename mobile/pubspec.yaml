@@ -1,0 +1,47 @@
+name: cropsify
+description: Intelligent Farm Management System — Module 1
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking
+  http: ^1.2.1
+
+  # Secure token storage
+  flutter_secure_storage: ^9.0.0
+
+  # State management
+  provider: ^6.1.2
+
+  # Navigation
+  go_router: ^13.2.0
+
+  # Local persistence (non-sensitive)
+  shared_preferences: ^2.2.3
+
+  # OTP pin input
+  pin_code_fields: ^8.0.1
+
+  # Map (OpenStreetMap — no API key needed)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
+
+  # Device location (13.x → geolocator_android 4.6.2 — no Color.toARGB32 issue)
+  geolocator: ^13.0.0
+
+  # Icons
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,102 @@
+services:
+
+  # ── PostgreSQL database ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: cropsify_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       cropsify
+      POSTGRES_USER:     cropsify_user
+      POSTGRES_PASSWORD: cropsify_pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"       # expose so you can inspect from DBeaver / pgAdmin
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cropsify_user -d cropsify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Node.js backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cropsify_backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"   # exposed so Android emulator (10.0.2.2:5000) can reach it
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+
+      # Database — points to the postgres service name
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_NAME:     cropsify
+      DB_USER:     cropsify_user
+      DB_PASSWORD: cropsify_pass
+
+      # JWT — change these in production!
+      JWT_ACCESS_SECRET:  dev_access_secret_change_in_prod
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
+      JWT_ACCESS_EXPIRES:  15m
+      JWT_REFRESH_EXPIRES: 7d
+
+      # OTP & security
+      OTP_EXPIRES_MINUTES:    3
+      MAX_OTP_RESENDS:        3
+      MAX_FAILED_ATTEMPTS:    5
+      LOCK_DURATION_MINUTES:  15
+
+      # Email — real Gmail SMTP (app password required)
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: hk5028203@gmail.com
+      SMTP_PASS: "ujsa brul gpar srdj"
+      EMAIL_FROM: "Cropsify <hk5028203@gmail.com>"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── React admin panel (nginx) ────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1   # nginx proxies /api → backend:5000
+    container_name: cropsify_web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  # ── ML service (Python / FastAPI — add when ml/ folder is ready) ─────────────
+  # Uncomment this block once you create the ml/ directory with its Dockerfile.
+  #
+  # ml:
+  #   build:
+  #     context: ./ml
+  #     dockerfile: Dockerfile
+  #   container_name: cropsify_ml
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     DB_HOST:     postgres
+  #     DB_PORT:     5432
+  #     DB_NAME:     cropsify
+  #     DB_USER:     cropsify_user
+  #     DB_PASSWORD: cropsify_pass
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local

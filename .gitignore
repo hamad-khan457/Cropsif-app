@@ -1,0 +1,62 @@
+# =================================================
+# NODE / REACT
+# =================================================
+
+backend/
+.env
+node_modules/
+dist/
+build/
+.next/
+coverage/
+.vite/
+.cache/
+.parcel-cache/
+
+# =================================================
+# FLUTTER / DART
+# =================================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+# Flutter build folders
+build/
+
+# Flutter generated files
+**/generated_plugin_registrant.dart
+
+# Android
+android/.gradle/
+android/app/build/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# =================================================
+# LOGS
+# =================================================
+*.log
+
+# =================================================
+# IDE
+# =================================================
+.vscode/
+.idea/
+
+# =================================================
+# SYSTEM FILES
+# =================================================
+.DS_Store
+Thumbs.db
+
+# =================================================
+# TYPESCRIPT
+# =================================================
+*.tsbuildinfo
