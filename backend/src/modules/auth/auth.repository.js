@@ -98,6 +98,67 @@ async function deactivateUser(userId) {
   );
 }
 
+// ─── Pending Registrations ────────────────────────────────────────────────────
+// User data lives here until OTP is verified; then it moves to the users table.
+
+async function upsertPendingRegistration({ fullName, email, phone, cnic, passwordHash, role, otpCode, otpExpiresAt }) {
+  const { rows } = await query(
+    `INSERT INTO pending_registrations
+       (email, phone, cnic, full_name, password_hash, role, otp_code, otp_expires_at, resend_count)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)
+     ON CONFLICT (email) DO UPDATE
+       SET phone         = EXCLUDED.phone,
+           cnic          = EXCLUDED.cnic,
+           full_name     = EXCLUDED.full_name,
+           password_hash = EXCLUDED.password_hash,
+           role          = EXCLUDED.role,
+           otp_code      = EXCLUDED.otp_code,
+           otp_expires_at = EXCLUDED.otp_expires_at,
+           resend_count  = 0,
+           created_at    = NOW()
+     RETURNING *`,
+    [email, phone, cnic, fullName, passwordHash, role, otpCode, otpExpiresAt],
+  );
+  return rows[0];
+}
+
+async function findPendingByEmail(email) {
+  const { rows } = await query(
+    `SELECT * FROM pending_registrations WHERE email = $1`,
+    [email],
+  );
+  return rows[0] || null;
+}
+
+async function findPendingByPhone(phone) {
+  const { rows } = await query(
+    `SELECT id FROM pending_registrations WHERE phone = $1`,
+    [phone],
+  );
+  return rows[0] || null;
+}
+
+async function findPendingByCnic(cnic) {
+  const { rows } = await query(
+    `SELECT id FROM pending_registrations WHERE cnic = $1`,
+    [cnic],
+  );
+  return rows[0] || null;
+}
+
+async function updatePendingOtp(email, otpCode, otpExpiresAt) {
+  await query(
+    `UPDATE pending_registrations
+     SET otp_code = $2, otp_expires_at = $3, resend_count = resend_count + 1
+     WHERE email = $1`,
+    [email, otpCode, otpExpiresAt],
+  );
+}
+
+async function deletePendingByEmail(email) {
+  await query(`DELETE FROM pending_registrations WHERE email = $1`, [email]);
+}
+
 // ─── OTPs ─────────────────────────────────────────────────────────────────────
 
 async function createOtp({ userId, otpCode, otpType, expiresAt }) {
@@ -212,6 +273,12 @@ async function markPasswordResetUsed(id) {
 }
 
 module.exports = {
+  upsertPendingRegistration,
+  findPendingByEmail,
+  findPendingByPhone,
+  findPendingByCnic,
+  updatePendingOtp,
+  deletePendingByEmail,
   createUser,
   findUserByEmail,
   findUserByPhone,

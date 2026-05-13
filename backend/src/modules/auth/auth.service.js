@@ -11,45 +11,96 @@ const RESET_EXPIRES_MINUTES = parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTE
 const MAX_OTP_RESENDS     = parseInt(process.env.OTP_MAX_RESEND_ATTEMPTS    || '3');
 
 // ─── Registration ─────────────────────────────────────────────────────────────
+// No row is written to the users table here. Data goes to pending_registrations
+// only. The user row is created in verifyOtpByEmail once the OTP is confirmed.
 
 async function register({ fullName, email, phone, cnic, password, role }) {
+  // Check verified users
   const byEmail = await repo.findUserByEmail(email);
   if (byEmail) throw Object.assign(new Error('Account already exists with this email'), { statusCode: 409 });
 
+  // Check phone/CNIC against verified users AND any OTHER pending entry
   const byPhone = await repo.findUserByPhone(phone);
   if (byPhone) throw Object.assign(new Error('Account already exists with this phone number'), { statusCode: 409 });
+  const pendingPhone = await repo.findPendingByPhone(phone);
+  if (pendingPhone) {
+    // Only block if it's a DIFFERENT email (same person retrying is fine)
+    const existing = await repo.findPendingByEmail(email);
+    if (!existing || existing.phone !== phone) {
+      throw Object.assign(new Error('Account already exists with this phone number'), { statusCode: 409 });
+    }
+  }
 
   const byCnic = await repo.findUserByCnic(cnic);
   if (byCnic) throw Object.assign(new Error('Account already exists with this CNIC'), { statusCode: 409 });
+  const pendingCnic = await repo.findPendingByCnic(cnic);
+  if (pendingCnic) {
+    const existing = await repo.findPendingByEmail(email);
+    if (!existing || existing.cnic !== cnic) {
+      throw Object.assign(new Error('Account already exists with this CNIC'), { statusCode: 409 });
+    }
+  }
 
   const passwordHash = await hashPassword(password);
-  const user = await repo.createUser({ fullName, email, phone, cnic, passwordHash, role });
+  const otpCode  = generateOtp();
+  const expiresAt = otpExpiresAt();
 
-  await _issueAndSendOtp(user, 'email_verification');
+  // Save to pending_registrations (upsert so same email can retry)
+  await repo.upsertPendingRegistration({
+    fullName, email, phone, cnic, passwordHash, role,
+    otpCode, otpExpiresAt: expiresAt,
+  });
 
-  return { userId: user.id, message: 'Registration successful. Check your email for the OTP.' };
+  await sendOtpEmail(email, fullName, otpCode);
+
+  return { message: 'Registration initiated. Please verify your email with the OTP sent.' };
 }
 
 // ─── OTP Verification ─────────────────────────────────────────────────────────
 
+// Used for password-reset and any non-registration OTP type (user already exists)
 async function verifyOtp(userId, otpCode, otpType = 'email_verification') {
   const record = await repo.findValidOtp(userId, otpType);
-
   if (!record) throw Object.assign(new Error('OTP expired or not found'), { statusCode: 400 });
 
   if (record.otp_code !== otpCode) {
     await repo.incrementOtpAttempts(record.id);
     throw Object.assign(new Error('Invalid OTP'), { statusCode: 400 });
   }
-
   await repo.markOtpUsed(record.id);
+  return { verified: true };
+}
 
+// Email-based entry point (used by the controller for ALL OTP types)
+async function verifyOtpByEmail(email, otpCode, otpType = 'email_verification') {
   if (otpType === 'email_verification') {
-    await repo.markUserVerified(userId);
+    // Registration path — user does NOT exist in users table yet
+    const pending = await repo.findPendingByEmail(email);
+    if (!pending) throw Object.assign(new Error('No pending registration found for this email'), { statusCode: 404 });
 
-    // Auto-login after email verification — return tokens so app skips login step
-    const user    = await repo.findUserById(userId);
-    const tokens  = buildTokenPair(user);
+    if (new Date(pending.otp_expires_at) < new Date()) {
+      throw Object.assign(new Error('OTP has expired. Please request a new one.'), { statusCode: 400 });
+    }
+    if (pending.otp_code !== otpCode) {
+      throw Object.assign(new Error('Invalid OTP'), { statusCode: 400 });
+    }
+
+    // OTP is valid — NOW create the user in the users table
+    const user = await repo.createUser({
+      fullName:     pending.full_name,
+      email:        pending.email,
+      phone:        pending.phone,
+      cnic:         pending.cnic,
+      passwordHash: pending.password_hash,
+      role:         pending.role,
+    });
+    await repo.markUserVerified(user.id);
+
+    // Clean up pending entry
+    await repo.deletePendingByEmail(email);
+
+    // Auto-login — return tokens so the app skips the login step
+    const tokens    = buildTokenPair({ ...user, is_verified: true });
     const tokenHash = hashToken(tokens.refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await repo.storeRefreshToken({ userId: user.id, tokenHash, deviceInfo: null, ipAddress: null, expiresAt });
@@ -70,11 +121,7 @@ async function verifyOtp(userId, otpCode, otpType = 'email_verification') {
     };
   }
 
-  return { verified: true };
-}
-
-// Email-based wrapper used by the controller (Flutter sends email, not userId)
-async function verifyOtpByEmail(email, otpCode, otpType = 'email_verification') {
+  // Non-registration OTP (password reset etc.) — user must already exist
   const user = await repo.findUserByEmail(email);
   if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
   return verifyOtp(user.id, otpCode, otpType);
@@ -82,6 +129,7 @@ async function verifyOtpByEmail(email, otpCode, otpType = 'email_verification') 
 
 // ─── OTP Resend ───────────────────────────────────────────────────────────────
 
+// Used for password-reset resend (user already exists in users table)
 async function resendOtp(userId, otpType = 'email_verification') {
   const resendCount = await repo.countOtpResends(userId, otpType);
   if (resendCount >= MAX_OTP_RESENDS) {
@@ -90,16 +138,44 @@ async function resendOtp(userId, otpType = 'email_verification') {
       { statusCode: 429 },
     );
   }
-
   const user = await repo.findUserById(userId);
   if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
-
   await _issueAndSendOtp(user, otpType);
   return { message: 'OTP resent successfully' };
 }
 
-// Email-based wrapper used by the controller
+// Email-based resend — handles both pending registrations and verified users
 async function resendOtpByEmail(email, otpType = 'email_verification') {
+  if (otpType === 'email_verification') {
+    // Look in pending_registrations (user not yet created)
+    const pending = await repo.findPendingByEmail(email);
+    if (!pending) {
+      // Check if a verified account exists for this email
+      const user = await repo.findUserByEmail(email);
+      if (user) {
+        throw Object.assign(
+          new Error('This email is already registered. Please log in.'),
+          { statusCode: 409 },
+        );
+      }
+      throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    }
+
+    if (pending.resend_count >= MAX_OTP_RESENDS) {
+      throw Object.assign(
+        new Error('Maximum OTP resend attempts exceeded. Please wait 30 minutes.'),
+        { statusCode: 429 },
+      );
+    }
+
+    const otpCode  = generateOtp();
+    const expiresAt = otpExpiresAt();
+    await repo.updatePendingOtp(email, otpCode, expiresAt);
+    await sendOtpEmail(email, pending.full_name, otpCode);
+    return { message: 'OTP resent successfully' };
+  }
+
+  // Password-reset and other types — look in users table
   const user = await repo.findUserByEmail(email);
   if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
   return resendOtp(user.id, otpType);

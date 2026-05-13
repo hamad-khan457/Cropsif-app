@@ -81,7 +81,7 @@ class _OtpScreenState extends State<OtpScreen> {
         onBack:  () => context.go(AppRouter.register),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -116,7 +116,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, color: AppTheme.primary)),
               TextButton(
-                onPressed: () => context.go(AppRouter.register),
+                onPressed: () => context.push(AppRouter.changeEmail),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -185,6 +185,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   onPressed: auth.loading ? null : _resend,
                   child: Text(context.tr('Resend OTP', 'OTP دوبارہ بھیجیں')),
                 ),
+              const SizedBox(height: 16),
             ],
           ),
         ),

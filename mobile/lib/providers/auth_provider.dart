@@ -102,6 +102,27 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Used by the Change Email flow.
+  /// Returns 'otp_sent' | 'already_registered' | 'not_found' | 'error'
+  Future<String> checkEmailForChange(String email) async {
+    _setLoading(true);
+    try {
+      await _repo.resendOtp(email);
+      _loading = false;
+      notifyListeners();
+      return 'otp_sent';
+    } on AppException catch (e) {
+      _loading = false;
+      if (e.statusCode == 404) { notifyListeners(); return 'not_found'; }
+      if (e.statusCode == 409) { notifyListeners(); return 'already_registered'; }
+      _setError(e);
+      return 'error';
+    } catch (e) {
+      _setError(e);
+      return 'error';
+    }
+  }
+
   Future<bool> login({required String email, required String password}) async {
     _setLoading(true);
     try {

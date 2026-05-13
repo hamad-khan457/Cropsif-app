@@ -150,3 +150,4 @@ class _AppRootState extends State<_AppRoot> {
     );
   }
 }
+//flutter run --dart-define=BACKEND_HOST=192.168.100.239

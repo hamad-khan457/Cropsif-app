@@ -9,6 +9,7 @@ import '../features/auth/screens/welcome_screen.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
 import '../features/auth/screens/otp_screen.dart';
+import '../features/auth/screens/change_email_screen.dart';
 import '../features/auth/screens/forgot_password_screen.dart';
 import '../features/auth/screens/forgot_password_otp_screen.dart';
 import '../features/auth/screens/reset_password_screen.dart';
@@ -31,6 +32,7 @@ class AppRouter {
   static const login           = '/login';
   static const register        = '/register';
   static const otp             = '/otp';
+  static const changeEmail     = '/change-email';
   static const forgotPassword    = '/forgot-password';
   static const resetPassword     = '/reset-password';
   static const forgotPasswordOtp = '/forgot-password-otp'; // 3-step OTP flow
@@ -68,8 +70,8 @@ class AppRouter {
       if (isUnknown) return loc == splash ? null : splash;
 
       final publicRoutes = {
-        welcome, login, register, otp, forgotPassword, resetPassword,
-        forgotPasswordOtp, splash,
+        welcome, login, register, otp, changeEmail, forgotPassword,
+        resetPassword, forgotPasswordOtp, splash,
       };
       if (isAuth  && publicRoutes.contains(loc)) return home;
       if (!isAuth && loc == home)                return welcome;
@@ -85,6 +87,7 @@ class AppRouter {
         path: otp,
         builder: (_, state) => OtpScreen(email: state.extra as String? ?? ''),
       ),
+      GoRoute(path: changeEmail, builder: (_, __) => const ChangeEmailScreen()),
       GoRoute(path: forgotPassword,    builder: (_, __) => const ForgotPasswordScreen()),
       GoRoute(path: forgotPasswordOtp, builder: (_, __) => const ForgotPasswordOtpScreen()),
       GoRoute(
