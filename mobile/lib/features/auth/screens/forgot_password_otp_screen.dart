@@ -11,7 +11,7 @@ import '../../../core/utils/validators.dart';
 import '../../../core/widgets/cropsify_app_bar.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/auth_button.dart';
-
+import 'package:pin_code_fields/pin_code_fields.dart';
 /// Three-step password reset:
 ///   Step 0 — Enter email → sends OTP
 ///   Step 1 — Enter 6-digit OTP received on email
@@ -237,11 +237,37 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> {
           icon:  Icons.mark_email_unread_outlined,
           title: _l('Enter Reset Code', 'ری سیٹ کوڈ درج کریں'),
           sub:   _l(
-            'We sent a 6-digit code to\n${_emailCtrl.text}',
-            'ہم نے 6 ہندسوں کا کوڈ بھیجا:\n${_emailCtrl.text}',
+            'We sent a 6-digit code to',
+            'ہم نے 6 ہندسوں کا کوڈ بھیجا:',
           ),
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 12),
+        Text(
+          _emailCtrl.text,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: AppTheme.primary,
+          ),
+        ),
+        TextButton(
+          onPressed: () {
+            _timer?.cancel();
+            _otpCtrl.clear();
+            setState(() { _otp = ''; _step = 0; });
+          },
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            _l('Change email', 'ای میل تبدیل کریں'),
+            style: const TextStyle(
+              fontSize: 13,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
         Theme(
           data: Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(

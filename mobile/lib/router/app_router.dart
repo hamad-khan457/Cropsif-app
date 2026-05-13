@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
+import '../features/scan/screens/plant_disease_scan_screen.dart';
 
 import '../providers/auth_provider.dart';
 import '../data/models/parcel_model.dart';
@@ -14,6 +13,8 @@ import '../features/auth/screens/forgot_password_screen.dart';
 import '../features/auth/screens/forgot_password_otp_screen.dart';
 import '../features/auth/screens/reset_password_screen.dart';
 import '../features/home/screens/home_screen.dart';
+import '../features/home/screens/manager_home_screen.dart';
+import '../features/home/screens/worker_home_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/profile/screens/edit_profile_screen.dart';
 import '../features/profile/screens/change_password_screen.dart';
@@ -39,6 +40,13 @@ class AppRouter {
   static const changePassword  = '/profile/password';
   static const notifications   = '/profile/notifications';
   static const accountSettings = '/profile/account';
+
+  // Scan
+  static const plantDiseaseScan = '/scan/plant-disease';
+
+  // Role-specific home routes
+  static const managerHome     = '/manager-home';
+  static const workerHome      = '/worker-home';
 
   // Module 2 — Land Portfolio
   static const landPortfolio   = '/parcels';
@@ -86,6 +94,9 @@ class AppRouter {
 
       // ── Main ─────────────────────────────────────────────────────────────
       GoRoute(path: home,            builder: (_, __) => const HomeScreen()),
+      GoRoute(path: managerHome,     builder: (_, __) => const ManagerHomeScreen()),
+      GoRoute(path: workerHome,      builder: (_, __) => const WorkerHomeScreen()),
+      GoRoute(path: plantDiseaseScan, builder: (_, __) => const PlantDiseaseScanScreen()),
       GoRoute(path: profile,         builder: (_, __) => const ProfileScreen()),
       GoRoute(path: editProfile,     builder: (_, __) => const EditProfileScreen()),
       GoRoute(path: changePassword,  builder: (_, __) => const ChangePasswordScreen()),

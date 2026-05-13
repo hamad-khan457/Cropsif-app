@@ -7,6 +7,7 @@ const authRoutes    = require('./modules/auth/auth.routes');
 const usersRoutes   = require('./modules/users/users.routes');
 const adminRoutes   = require('./modules/admin/admin.routes');
 const parcelRoutes  = require('./modules/parcels/parcel.routes');
+const scanRoutes    = require('./modules/scan/scan.routes');
 const { errorHandler, notFoundHandler } = require('./middleware/error.middleware');
 
 const app = express();
@@ -18,9 +19,11 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: [
-    'http://localhost:3000',   // React dev server & Docker web container
-    'http://localhost:5173',   // Vite default port
-    /^http:\/\/192\.168\.\d+\.\d+:\d+$/,  // LAN access from physical devices
+    'http://localhost:3000',
+    'http://localhost:5173',
+    /^http:\/\/192\.168\.\d+\.\d+:\d+$/,   // Home networks (192.168.x.x)
+    /^http:\/\/10\.\d+\.\d+\.\d+:\d+$/,    // University / corporate (10.x.x.x)
+    /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:\d+$/,  // Docker / VPN
   ],
   credentials: true,
 }));
@@ -41,6 +44,9 @@ app.use('/api/v1/admin',   adminRoutes);
 
 // Module 2 routes
 app.use('/api/v1/parcels', parcelRoutes);
+
+// ML scan
+app.use('/api/v1/scan', scanRoutes);
 
 // Error handling
 app.use(notFoundHandler);

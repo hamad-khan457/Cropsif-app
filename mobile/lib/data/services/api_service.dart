@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/utils/token_storage.dart';
@@ -95,6 +96,38 @@ class ApiService {
       throw const AppException('No internet connection.', statusCode: 0);
     } on TimeoutException {
       throw const AppException('Request timed out. Please try again.', statusCode: 0);
+    }
+  }
+
+  Future<Map<String, dynamic>> authPostFile(String url, String filePath) async {
+    try {
+      final token = await _getValidToken();
+      final request = http.MultipartRequest('POST', Uri.parse(url));
+      request.headers['Authorization'] = 'Bearer $token';
+
+      // Always declare an explicit image MIME type so the backend's file-type
+      // filter never rejects the upload as application/octet-stream.
+      final ext = filePath.split('.').last.toLowerCase();
+      final mime = switch (ext) {
+        'png'  => MediaType('image', 'png'),
+        'webp' => MediaType('image', 'webp'),
+        'gif'  => MediaType('image', 'gif'),
+        _      => MediaType('image', 'jpeg'), // jpg / heic / unknown → jpeg
+      };
+
+      request.files.add(await http.MultipartFile.fromPath(
+        'image',
+        filePath,
+        contentType: mime,
+      ));
+
+      final streamed = await _client.send(request).timeout(const Duration(seconds: 60));
+      final res = await http.Response.fromStream(streamed);
+      return _parse(res);
+    } on SocketException {
+      throw const AppException('No internet connection.', statusCode: 0);
+    } on TimeoutException {
+      throw const AppException('Scan timed out. Please try again.', statusCode: 0);
     }
   }
 

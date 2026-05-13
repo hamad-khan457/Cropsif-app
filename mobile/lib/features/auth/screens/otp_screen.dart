@@ -10,7 +10,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/l10n/tr.dart';
 import '../../../core/widgets/cropsify_app_bar.dart';
 import '../widgets/auth_button.dart';
-
+import 'package:pin_code_fields/pin_code_fields.dart';
 class OtpScreen extends StatefulWidget {
   final String email;
   const OtpScreen({super.key, required this.email});
@@ -115,7 +115,21 @@ class _OtpScreenState extends State<OtpScreen> {
               Text(widget.email,
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, color: AppTheme.primary)),
-              const SizedBox(height: 36),
+              TextButton(
+                onPressed: () => context.go(AppRouter.register),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  context.tr('Change email', 'ای میل تبدیل کریں'),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
 
               // OTP input
               Theme(

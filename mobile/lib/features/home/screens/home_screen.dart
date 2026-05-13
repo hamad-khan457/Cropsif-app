@@ -1,12 +1,14 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/language_provider.dart';
 import '../../../providers/user_provider.dart';
+import '../../../providers/parcel_provider.dart';
 import '../../../router/app_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/models/parcel_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,233 +21,143 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<UserProvider>().loadProfile();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<UserProvider>().loadProfile();
+      if (!mounted) return;
+      final user = context.read<UserProvider>().user;
+      if (user?.role == 'manager') {
+        context.replace(AppRouter.managerHome);
+        return;
+      }
+      if (user?.role == 'worker') {
+        context.replace(AppRouter.workerHome);
+        return;
+      }
+      context.read<ParcelProvider>().loadParcels();
     });
   }
 
+  String _greeting(bool isUrdu) {
+    final h = DateTime.now().hour;
+    if (h < 12) return isUrdu ? 'صبح بخیر 👋' : 'Good morning 👋';
+    if (h < 17) return isUrdu ? 'دوپہر بخیر 👋' : 'Good afternoon 👋';
+    return isUrdu ? 'شام بخیر 👋' : 'Good evening 👋';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final userProv = context.watch<UserProvider>();
-    final lang     = context.watch<LanguageProvider>();
-    final user     = userProv.user;
+    final userProv   = context.watch<UserProvider>();
+    final parcelProv = context.watch<ParcelProvider>();
+    final lang       = context.watch<LanguageProvider>();
+    final user       = userProv.user;
+    final isUrdu     = lang.isUrdu;
+    final parcels    = parcelProv.parcels;
 
-    // Show toggle for all field-facing roles (landowner, manager, worker)
-    // Admin sees English-only web panel so toggle not needed there
-    final showLangToggle = user?.role != 'admin';
-
-    return Directionality(
-      textDirection: lang.isUrdu ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
-        backgroundColor: AppTheme.background,
-        appBar: AppBar(
-          title: const Text('Cropsify'),
-          automaticallyImplyLeading: false,
-          actions: [
-            // Language toggle — shown for all non-admin roles
-            if (showLangToggle)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: InkWell(
-                  onTap: () => lang.toggle(),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.20),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white54),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Column(
+        children: [
+          _DashboardHeader(
+            greeting: _greeting(isUrdu),
+            user: user,
+          ),
+          Expanded(
+            child: userProv.loading && user == null
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      await context.read<UserProvider>().loadProfile();
+                      await context.read<ParcelProvider>().loadParcels();
+                    },
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                       children: [
-                        const Icon(Icons.translate, size: 14, color: Colors.white),
-                        const SizedBox(width: 4),
+                        _StatsGrid(parcels: parcels),
+                        const SizedBox(height: 22),
                         Text(
-                          lang.isUrdu ? 'EN' : 'اردو',
+                          isUrdu ? 'میرے کھیت' : 'My Parcels',
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A1A1A),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        if (parcelProv.loading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (parcels.isEmpty)
+                          _EmptyParcels(isUrdu: isUrdu)
+                        else
+                          ...parcels.map((p) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _ParcelCard(parcel: p, isUrdu: isUrdu),
+                              )),
+                        const SizedBox(height: 4),
+                        _RegisterParcelButton(isUrdu: isUrdu),
                       ],
                     ),
                   ),
-                ),
-              ),
-            IconButton(
-              icon: const CircleAvatar(
-                backgroundColor: Colors.white24,
-                child: Icon(Icons.person_outline, color: Colors.white, size: 20),
-              ),
-              onPressed: () => context.go(AppRouter.profile),
-            ),
-          ],
-        ),
-        body: userProv.loading && user == null
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: () => context.read<UserProvider>().loadProfile(),
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    _GreetingCard(user: user),
-                    const SizedBox(height: 24),
-                    if (user != null) ..._quickActions(context, user.role, lang),
-                    const SizedBox(height: 24),
-                    _ComingSoonCard(),
-                  ],
-                ),
-              ),
+          ),
+        ],
       ),
+      bottomNavigationBar: const _BottomNav(currentIndex: 0),
     );
-  }
-
-  List<Widget> _quickActions(BuildContext context, String role, LanguageProvider lang) {
-    final actions = _actionsForRole(role, lang);
-    return [
-      Text(
-        lang.t('Quick Actions', 'فوری اقدامات'),
-        style: Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-      ),
-      const SizedBox(height: 12),
-      GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: actions.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.6,
-        ),
-        itemBuilder: (_, i) => _ActionCard(
-          icon:  actions[i].$1,
-          label: actions[i].$2,
-          color: actions[i].$3,
-          onTap: actions[i].$4,
-        ),
-      ),
-    ];
-  }
-
-  List<(IconData, String, Color, VoidCallback)> _actionsForRole(
-      String role, LanguageProvider lang) {
-    String t(String en, String ur) => lang.t(en, ur);
-
-    return switch (role) {
-      AppConstants.roleLandowner => [
-        (Icons.map_outlined,        t('My Fields',  'میرے کھیت'),  const Color(0xFF388E3C), () => context.push(AppRouter.landPortfolio)),
-        (Icons.people_outline,      t('My Team',    'میری ٹیم'),   const Color(0xFF1976D2), () {}),
-        (Icons.bar_chart,           t('Financials', 'مالیات'),     const Color(0xFFFF8F00), () {}),
-        (Icons.cloud_outlined,      t('Weather',    'موسم'),       const Color(0xFF0097A7), () {}),
-      ],
-      AppConstants.roleManager => [
-        (Icons.checklist_outlined,  t('Tasks',        'کام'),             const Color(0xFF388E3C), () {}),
-        (Icons.people_outline,      t('Workers',      'مزدور'),           const Color(0xFF1976D2), () {}),
-        (Icons.terrain_outlined,    t('Fields',       'کھیت'),            const Color(0xFF7B1FA2), () => context.push(AppRouter.landPortfolio)),
-        (Icons.bug_report_outlined, t('Pest Alerts',  'کیڑوں کی اطلاع'), const Color(0xFFD32F2F), () {}),
-      ],
-      AppConstants.roleWorker => [
-        (Icons.task_alt_outlined,   t('My Tasks',     'میرے کام'),       const Color(0xFF388E3C), () {}),
-        (Icons.location_on_outlined,t('Check In',     'حاضری'),          const Color(0xFF1976D2), () {}),
-        (Icons.report_outlined,     t('Report Issue', 'مسئلہ رپورٹ'),    const Color(0xFFFF8F00), () {}),
-        (Icons.cloud_outlined,      t('Weather',      'موسم'),           const Color(0xFF0097A7), () {}),
-      ],
-      _ => [
-        (Icons.people_outline, 'Users',   const Color(0xFF388E3C), () {}),
-        (Icons.bar_chart,      'Reports', const Color(0xFF1976D2), () {}),
-      ],
-    };
   }
 }
 
-// ── Greeting card ─────────────────────────────────────────────────────────────
+// ── Header ─────────────────────────────────────────────────────────────────────
 
-class _GreetingCard extends StatelessWidget {
+class _DashboardHeader extends StatelessWidget {
+  final String greeting;
   final UserModel? user;
-  const _GreetingCard({this.user});
-
-  String _greeting(bool isUrdu) {
-    final h = DateTime.now().hour;
-    if (h < 12) return isUrdu ? 'صبح بخیر،'    : 'Good morning,';
-    if (h < 17) return isUrdu ? 'دوپہر بخیر،'  : 'Good afternoon,';
-    return             isUrdu ? 'شام بخیر،'     : 'Good evening,';
-  }
-
-  String _roleLabel(UserModel u, bool isUrdu) {
-    if (!isUrdu) return u.roleLabel;
-    return switch (u.role) {
-      'landowner' => 'زمیندار',
-      'manager'   => 'فارم منیجر',
-      'worker'    => 'فیلڈ ورکر',
-      'admin'     => 'منتظم',
-      _           => u.roleLabel,
-    };
-  }
+  const _DashboardHeader({required this.greeting, this.user});
 
   @override
   Widget build(BuildContext context) {
-    final isUrdu = context.watch<LanguageProvider>().isUrdu;
-
+    final top = MediaQuery.of(context).padding.top;
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.primary, Color(0xFF43A047)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
+      color: AppTheme.primary,
+      padding: EdgeInsets.only(
+        top: top + 14,
+        bottom: 18,
+        left: 20,
+        right: 8,
       ),
       child: Row(
         children: [
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  isUrdu ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _greeting(isUrdu),
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  greeting,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                  ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
-                  user?.fullName.split(' ').first ?? (isUrdu ? 'کسان' : 'Farmer'),
+                  user?.fullName ?? '',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    user != null ? _roleLabel(user!, isUrdu) : '',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(16),
+          IconButton(
+            icon: const Icon(
+              Icons.notifications_outlined,
+              color: Color(0xFFFFB300),
+              size: 28,
             ),
-            child: const Icon(Icons.grass, size: 36, color: Colors.white),
+            onPressed: () {},
           ),
         ],
       ),
@@ -253,103 +165,369 @@ class _GreetingCard extends StatelessWidget {
   }
 }
 
-// ── Action card ───────────────────────────────────────────────────────────────
+// ── Stats Grid ─────────────────────────────────────────────────────────────────
 
-class _ActionCard extends StatelessWidget {
-  final IconData icon;
+class _StatsGrid extends StatelessWidget {
+  final List<ParcelModel> parcels;
+  const _StatsGrid({required this.parcels});
+
+  @override
+  Widget build(BuildContext context) {
+    final activeManagers   = parcels.where((p) => p.managerName != null && p.managerName!.isNotEmpty).length;
+    final pendingApprovals = 0;
+    final activeAlerts     = 0;
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.65,
+      children: [
+        _StatCard(
+          value: '${parcels.length}',
+          label: 'Parcels',
+          labelUr: 'کھیت',
+          valueColor: AppTheme.primary,
+        ),
+        _StatCard(
+          value: '$activeManagers',
+          label: 'Active Managers',
+          labelUr: 'فعال منیجرز',
+          valueColor: AppTheme.primary,
+        ),
+        _StatCard(
+          value: '$pendingApprovals',
+          label: 'Pending Approvals',
+          labelUr: 'زیر التواء منظوریاں',
+          valueColor: const Color(0xFFFF8F00),
+        ),
+        _StatCard(
+          value: '$activeAlerts',
+          label: 'Active Alerts',
+          labelUr: 'فعال الرٹس',
+          valueColor: const Color(0xFF1A1A1A),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String value;
   final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ActionCard({
-    required this.icon, required this.label,
-    required this.color, required this.onTap,
+  final String labelUr;
+  final Color  valueColor;
+  const _StatCard({
+    required this.value,
+    required this.label,
+    required this.labelUr,
+    required this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 22),
+    final isUrdu = context.watch<LanguageProvider>().isUrdu;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F7F0),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.bold,
+              color: valueColor,
+              height: 1,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isUrdu ? labelUr : label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFF757575),
+              height: 1.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Parcel Card ────────────────────────────────────────────────────────────────
+
+class _ParcelCard extends StatelessWidget {
+  final ParcelModel parcel;
+  final bool isUrdu;
+  const _ParcelCard({required this.parcel, required this.isUrdu});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasManager = parcel.managerName != null && parcel.managerName!.isNotEmpty;
+    final isActive   = parcel.isActive && hasManager;
+
+    final badgeText  = isActive
+        ? (isUrdu ? 'فعال' : 'Active')
+        : (isUrdu ? 'منیجر نہیں' : 'No Manager');
+    final badgeBg    = isActive ? const Color(0xFFE8F5E9) : const Color(0xFFFFF8E1);
+    final badgeFg    = isActive ? AppTheme.primary : const Color(0xFFFF8F00);
+
+    final details = [
+      if (parcel.areaAcres != null)
+        '${parcel.areaAcres!.toStringAsFixed(0)} ${isUrdu ? "ایکڑ" : "acres"}',
+      if (parcel.activeCrop != null) parcel.activeCrop!,
+    ].join(' · ');
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  parcel.name,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+                if (details.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    details,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF757575),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.person_outline,
+                        size: 14, color: Color(0xFF9E9E9E)),
+                    const SizedBox(width: 4),
+                    Text(
+                      hasManager
+                          ? parcel.managerName!
+                          : (isUrdu ? 'غیر مختص' : 'Unassigned'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF757575),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: badgeBg,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              badgeText,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: badgeFg,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────────
+
+class _EmptyParcels extends StatelessWidget {
+  final bool isUrdu;
+  const _EmptyParcels({required this.isUrdu});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        children: [
+          Icon(Icons.terrain_outlined, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 10),
+          Text(
+            isUrdu ? 'ابھی کوئی کھیت نہیں' : 'No parcels yet',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Register Parcel Button ─────────────────────────────────────────────────────
+
+class _RegisterParcelButton extends StatelessWidget {
+  final bool isUrdu;
+  const _RegisterParcelButton({required this.isUrdu});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push(AppRouter.registerParcel),
+      child: CustomPaint(
+        painter: _DashedBorderPainter(color: AppTheme.primary),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.add, color: AppTheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                isUrdu ? 'نئی زمین رجسٹر کریں' : 'Register New Parcel',
                 style: const TextStyle(
+                  color: AppTheme.primary,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: AppTheme.textPrimary,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Coming soon card ──────────────────────────────────────────────────────────
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  _DashedBorderPainter({required this.color});
 
-class _ComingSoonCard extends StatelessWidget {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    const radius = 12.0;
+    const dash   = 6.0;
+    const gap    = 4.0;
+
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        const Radius.circular(radius),
+      ));
+
+    final dest = Path();
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      bool draw = true;
+      while (distance < metric.length) {
+        final len = draw ? dash : gap;
+        if (draw) {
+          dest.addPath(
+            metric.extractPath(distance, math.min(distance + len, metric.length)),
+            Offset.zero,
+          );
+        }
+        distance += len;
+        draw = !draw;
+      }
+    }
+    canvas.drawPath(dest, paint);
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) => old.color != color;
+}
+
+// ── Bottom Navigation Bar ──────────────────────────────────────────────────────
+
+class _BottomNav extends StatelessWidget {
+  final int currentIndex;
+  const _BottomNav({required this.currentIndex});
+
   @override
   Widget build(BuildContext context) {
-    final isUrdu = context.watch<LanguageProvider>().isUrdu;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.primaryLight.withOpacity(0.5)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.rocket_launch_outlined, color: AppTheme.primary, size: 32),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  isUrdu ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isUrdu ? 'مزید خصوصیات آ رہی ہیں' : 'More Features Coming',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  isUrdu
-                      ? 'سیٹلائٹ نگرانی، AI معاون، بیماری کی تشخیص اور مزید — جلد آ رہا ہے۔'
-                      : 'Satellite monitoring, AI assistant, disease detection & more — coming soon.',
-                  style: TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 12, height: 1.4),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return BottomNavigationBar(
+      currentIndex: currentIndex,
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: AppTheme.accent,
+      unselectedItemColor: const Color(0xFF9E9E9E),
+      selectedFontSize: 11,
+      unselectedFontSize: 11,
+      backgroundColor: Colors.white,
+      elevation: 8,
+      onTap: (i) {
+        if (i == currentIndex) return;
+        switch (i) {
+          case 1:
+            context.go(AppRouter.landPortfolio);
+          case 2:
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Managers — coming soon'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          case 3:
+            context.go(AppRouter.profile);
+        }
+      },
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.map_outlined),
+          activeIcon: Icon(Icons.map),
+          label: 'Parcels',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.people_outline),
+          activeIcon: Icon(Icons.people),
+          label: 'Managers',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline),
+          activeIcon: Icon(Icons.person),
+          label: 'Profile',
+        ),
+      ],
     );
   }
 }

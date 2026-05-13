@@ -15,6 +15,7 @@ class ParcelModel {
   final String? activeCrop;
   final double? ndviScore;
   final bool    isActive;
+  final String? managerName;
   final DateTime createdAt;
 
   const ParcelModel({
@@ -32,6 +33,7 @@ class ParcelModel {
     this.activeCrop,
     this.ndviScore,
     this.isActive = true,
+    this.managerName,
     required this.createdAt,
   });
 
@@ -42,8 +44,8 @@ class ParcelModel {
       coords = rawCoords
           .whereType<Map>()
           .map((c) => LatLng(
-                (c['lat'] as num).toDouble(),
-                (c['lng'] as num).toDouble(),
+                _d(c['lat'])!,
+                _d(c['lng'])!,
               ))
           .toList();
     }
@@ -52,20 +54,26 @@ class ParcelModel {
       id:          j['id']          as String,
       name:        j['name']        as String,
       location:    j['location']    as String?,
-      areaAcres:   (j['area_acres'] as num?)?.toDouble(),
+      areaAcres:   _d(j['area_acres']),
       soilType:    j['soil_type']   as String?,
-      phLevel:     (j['ph_level']   as num?)?.toDouble(),
-      nitrogen:    (j['nitrogen']   as num?)?.toDouble(),
-      phosphorus:  (j['phosphorus'] as num?)?.toDouble(),
-      potassium:   (j['potassium']  as num?)?.toDouble(),
+      phLevel:     _d(j['ph_level']),
+      nitrogen:    _d(j['nitrogen']),
+      phosphorus:  _d(j['phosphorus']),
+      potassium:   _d(j['potassium']),
       irrigation:  j['irrigation']  as String?,
       coordinates: coords,
-      activeCrop:  j['active_crop'] as String?,
-      ndviScore:   (j['ndvi_score'] as num?)?.toDouble(),
-      isActive:    j['is_active']   as bool? ?? true,
-      createdAt:   DateTime.parse(j['created_at'] as String),
+      activeCrop:   j['active_crop']  as String?,
+      ndviScore:    _d(j['ndvi_score']),
+      isActive:     j['is_active']    as bool? ?? true,
+      managerName:  j['manager_name'] as String?,
+      createdAt:    DateTime.parse(j['created_at'] as String),
     );
   }
+
+  // PostgreSQL DECIMAL/NUMERIC columns come back as strings via the pg driver.
+  // This helper safely parses both num and String to double.
+  static double? _d(dynamic v) =>
+      v == null ? null : double.tryParse(v.toString());
 
   /// NDVI badge colour
   NdviBadge get ndviBadge {
